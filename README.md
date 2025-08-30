@@ -4,3 +4,4 @@ This repo is created as a test repository for our team to familierize themselves
 
 Group Members:
 Simon Greenaway
+Luke Miller
