@@ -1,1 +1,37 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+# Virtual envs
+.venv/
+venv/
+env/
+.env/
 .env
+pip-wheel-metadata/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
