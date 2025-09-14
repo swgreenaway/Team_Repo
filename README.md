@@ -4,12 +4,10 @@
 - Ayddan Hartle
 - Luke Meyer
 
+
 ---
 
 ## Metrics System Implementation
-
-
-### Architecture Overview
 
 ```
 src/app/metrics/
@@ -27,7 +25,7 @@ src/app/metrics/
 └── engine.py                # Parallel orchestration + NDJSON output
 ```
 
-### 8 Metrics Implemented
+### Metrics Implemented
 
 | Metric | Purpose | Scoring Focus |
 |--------|---------|---------------|
@@ -40,15 +38,6 @@ src/app/metrics/
 | `dataset_quality` | Dataset reliability metrics | Data quality, popularity, maintenance |
 | `code_quality` | Repository maintainability | Code style, testing, CI/CD practices |
 
-### Key Features
-
-- **Parallel Execution**: All metrics run concurrently using ThreadPoolExecutor
-- **Deterministic Scoring**: Placeholder implementations using stable hash functions
-- **NDJSON Output**: Auto-grader compatible format with individual scores + latencies
-- **NetScore Calculation**: Weighted average following specification formula
-- **Ecosystem Awareness**: Metrics respond to dataset/code URL availability
-- **Comprehensive Testing**: 4 test suites with colored terminal output
-
 ### Test Coverage for test_metrics.py
 - All 8 metrics properly registered
 - Score validation (0-1 range)
@@ -56,4 +45,3 @@ src/app/metrics/
 - NDJSON structure compliance
 - NetScore calculation accuracy
 ---
-

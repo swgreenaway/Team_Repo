@@ -1,0 +1,13 @@
+[tool.isort]
+# Keep consistent with flake8
+line_length = 100
+
+# Sensible formatting even if you don't use Black
+profile = "black"
+include_trailing_comma = true
+multi_line_output = 3
+ensure_newline_before_comments = true
+use_parentheses = true
+
+# Skip junk folders
+skip = [".venv", "venv", "build", "dist", ".mypy_cache", ".pytest_cache"]
