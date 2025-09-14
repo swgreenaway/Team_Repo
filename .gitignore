@@ -26,6 +26,8 @@ dist/
 venv/
 env/
 .env/
+.env
+
 pip-wheel-metadata/
 
 # Editors / OS
