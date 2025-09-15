@@ -1,12 +1,11 @@
 import time
 import Url_Parser
+import Installer
 from pathlib import Path
 
 def install_dependencies() -> int:
-    """Simulate dependency installation."""
-    print("Installing dependencies (placeholder)...")
-    # In reality: subprocess.run(["pip", "install", "--user", "-r", "requirements.txt"])
-    return 0
+    return Installer.install_dependencies()
+    
 
 
 def run_tests() -> int:
