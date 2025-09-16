@@ -6,6 +6,10 @@
 
 
 ---
+## Class Structure
+run -> Orchestrator.py  -> Installer.py
+                        -> Tester.py
+                        -> Url_Parser.py    
 
 ## Metrics System Implementation
 
