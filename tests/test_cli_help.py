@@ -1,7 +1,10 @@
 #Runs the program with --help which is the standard cmd line flag that makes the program print
 #its usage/help text
 #Passes if CLI correctly parses --help and shows a usage screen
-#! RUN with: py -m pytest -q -rs tests/test_cli_help.py
+
+"""Test purpose: ensure `--help` (or `-h`) prints a usage screen and exits 0.
+Skips (pending-safe) if help isn’t wired yet.
+"""
 
 import pytest
 

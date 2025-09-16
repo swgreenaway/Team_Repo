@@ -1,11 +1,13 @@
-#This test makes sure the CLI is properly rejecting unknown arguments
-#Cmd to run from root: py -m pytest -q -rs tests/test_cli_unknown_flag.py
-
+"""Test purpose: verify that an **unknown option/flag** is rejected with exit 2
+and an 'unrecognized arguments' message. If a subcommand is required, the test
+uses a valid subcommand (e.g., 'install') to exercise option parsing.
+"""
 import pytest
 
 def test_unknown_option_exits_2_and_shows_error(run_cli):
     code, out, err = run_cli("--definitely-not-a-real-flag")
     text = (err or out or "").lower()
+    
     if "required: command" in text:
         # requires a subcommand; try one if available
         h_code, h_out, h_err = run_cli("--help")

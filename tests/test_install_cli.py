@@ -10,8 +10,11 @@ This test verifies the success path:
 
 It auto-skips if the CLI module or 'install' subcommand isn't present yet.
 If present, fakes pip via monkeypatch to avoid a real install
+"""
 
-*Command to run test (run from repo root): py -m pytest -q -rs tests/test_install_cli.py
+"""Test purpose: verify that the `install` subcommand triggers a pip invocation
+and exits 0 on success. If the current implementation is a placeholder (no pip),
+the test skips (pending-safe).
 """
 
 import sys, runpy, subprocess, pytest
