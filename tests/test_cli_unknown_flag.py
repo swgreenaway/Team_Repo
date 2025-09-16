@@ -7,24 +7,13 @@ import subprocess
 import pytest
 
 # Locate src/ and the CLI file
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-CLI = SRC / "app" / "cli.py"
+CLI = Path("run") if Path("run").exists() else Path("run.py")
 
-#skips if cli doesnt exist
-@pytest.mark.skipif(not CLI.exists(), reason="CLI skeleton not created yet")
-
+@pytest.mark.skipif(not CLI.exists(), reason="root-level CLI not found (run / run.py)")
 def test_unknown_option_exits_2_and_shows_error():
-    """Unknown CLI flags should cause an argparse-style exit(2) with an error message."""
-    result = subprocess.run(
-        [sys.executable, str(CLI), "--definitely-not-a-real-flag"],
-        capture_output=True,
-        text=True,
-    )
-
-    # If argparse isn't wired yet, don't fail the build—treat as pending.
-    if result.returncode == 0:
-        pytest.skip("Parser not implemented yet (main returned 0 for unknown flag)")
-
-    assert result.returncode == 2
-    assert "unrecognized arguments" in (result.stderr or result.stdout).lower()
+    r = subprocess.run([sys.executable, str(CLI), "--definitely-not-a-real-flag"],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        pytest.skip("Parser not implemented yet (returned 0 for unknown flag)")
+    assert r.returncode == 2
+    assert "unrecognized arguments" in (r.stderr or r.stdout).lower()

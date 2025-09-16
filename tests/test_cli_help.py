@@ -9,26 +9,13 @@ import subprocess
 import pytest
 
 # Paths
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-CLI = SRC / "app" / "cli.py"
+CLI = Path("run") if Path("run").exists() else Path("run.py")
 
-@pytest.mark.skipif(not CLI.exists(), reason="CLI skeleton not created yet")
+@pytest.mark.skipif(not CLI.exists(), reason="root-level CLI not found (run / run.py)")
 def test_help_exits_zero_and_shows_usage():
-    """
-    Contract: `--help` should exit 0 and display a usage message.
-    Pending-safe: if no usage text appears, we skip (parser not wired yet).
-    """
-    result = subprocess.run(
-        [sys.executable, str(CLI), "--help"],
-        capture_output=True,
-        text=True,
-    )
-
-    out = (result.stdout or "") + (result.stderr or "")
-    if "usage:" not in out.lower():
+    r = subprocess.run([sys.executable, str(CLI), "--help"], capture_output=True, text=True)
+    text = (r.stdout or "") + (r.stderr or "")
+    if "usage:" not in text.lower():
         pytest.skip("Help/argparse not implemented yet")
-
-    assert result.returncode == 0
-    # Basic sanity that something help-like is printed
-    assert "usage:" in out.lower()
+    assert r.returncode == 0
+    assert "usage:" in text.lower()

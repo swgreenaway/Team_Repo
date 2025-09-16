@@ -15,69 +15,32 @@ If present, fakes pip via monkeypatch to avoid a real install
 """
 
 from pathlib import Path
-import sys
-import types
-import pytest
+import sys, runpy, subprocess, pytest
 
-#Make 'import app' work without installing the package
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+CLI = Path("run") if Path("run").exists() else Path("run.py")
 
-CLI_PATH = SRC / "app" / "cli.py"
-
-@pytest.mark.skipif(not CLI_PATH.exists(), reason="CLI skeleton not created yet")
-
-#monkeypatch and capsys are built in pytest fixtures 
-#monkeypatch patches functions during a test and automatically restores them afterwards
-#capsys grabs what the code prints out to sys.stdout or sys.stderr, currently not used
-def test_install_invokes_pip_and_exits_zero(monkeypatch):
-    """
-    Contract (from UML):
-      install -> runs pip install -> exit 0 on success
-
-    This test:
-      - SKIPS if the parser or 'install' isn't implemented yet.
-      - When present, fakes pip via monkeypatch to avoid real installs.
-    """
-    try:
-        import app.cli as cli
-    except Exception as e:
-        pytest.skip(f"CLI not importable yet: {e}")
-
-    # If there is a parser, require that 'install' shows up in help.
-    if not hasattr(cli, "build_parser"):
-        pytest.skip("build_parser() not implemented yet")
-    try:
-        help_text = cli.build_parser().format_help()
-    except Exception as e:
-        pytest.skip(f"parser not functional yet: {e}")
-    if "install" not in help_text:
+@pytest.mark.skipif(not CLI.exists(), reason="root-level CLI not found (run / run.py)")
+def test_install_subcommand_invokes_pip_and_exits_zero(monkeypatch):
+    # Only activate when 'install' is advertised
+    h = subprocess.run([sys.executable, str(CLI), "--help"], capture_output=True, text=True)
+    if "install" not in ((h.stdout or "") + (h.stderr or "")):
         pytest.skip("'install' subcommand not implemented yet")
 
-    # Fake out pip so no real installation happens.
     calls = []
     def fake_run(cmd, *a, **kw):
         calls.append(cmd)
         return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
     monkeypatch.setattr(subprocess, "run", fake_run, raising=True)
 
-    # Support either main(argv=None) or main() reading sys.argv
-    assert hasattr(cli, "main"), "CLI should expose main()"
+    # Run the script in-process so the monkeypatch applies
+    monkeypatch.setattr(sys, "argv", [str(CLI), "install"], raising=False)
     try:
-        sig = inspect.signature(cli.main)
-        if len(sig.parameters) == 0:
-            # No-arg main(): patch argv
-            monkeypatch.setattr(sys, "argv", ["app", "install"], raising=False)
-            rc = cli.main()
-        else:
-            rc = cli.main(["install"])
+        runpy.run_path(str(CLI), run_name="__main__")
+        rc = 0
     except SystemExit as e:
-        rc = e.code
+        rc = int(e.code)
 
-    # Success path per UML
-    assert rc == 0
+    assert rc == 0, "Expected exit 0 on successful install"
     assert calls, "Expected a pip command to be invoked"
     joined = " ".join(map(str, calls[0])) if isinstance(calls[0], (list, tuple)) else str(calls[0])
     assert "pip" in joined and "install" in joined
