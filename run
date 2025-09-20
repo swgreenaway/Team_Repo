@@ -1,25 +1,35 @@
 #!/usr/bin/env python3
-import argparse
-import sys
+import argparse, sys
 from pathlib import Path
 import Orchestrator
 
-def main() -> None:
+def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
     parser = argparse.ArgumentParser(description="CLI for Trustworthy Model Re-use")
     parser.add_argument("command", help="install | test | URL_FILE")
-    args = parser.parse_args()
+
+    # Parse-known so we can forward extras ONLY for 'test'
+    args, extra = parser.parse_known_args(argv)
+
+    if args.command == "test":
+        # Forward any remaining args (e.g., --cov, -k ...) to pytest
+        return Orchestrator.run_tests(pytest_args=extra)
+
+    # For every other command, unknown args are an error (strict mode)
+    if extra:
+        parser.error(f"unrecognized arguments: {' '.join(extra)}")  # exit code 2
 
     if args.command == "install":
-        sys.exit(Orchestrator.install_dependencies())
-    elif args.command == "test":
-        sys.exit(Orchestrator.run_tests())
-    else:
-        file_path = Path(args.command)
-        if not file_path.exists():
-            print(f"Error: file {file_path} not found.", file=sys.stderr)
-            sys.exit(1)
-        sys.exit(Orchestrator.process_urls(file_path))
+        return Orchestrator.install_dependencies()
 
+    # Treat anything else as a file-first workflow
+    file_path = Path(args.command)
+    if not file_path.exists():
+        print(f"Error: file {file_path} not found.", file=sys.stderr)
+        return 1
+    return Orchestrator.process_urls(file_path)
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
