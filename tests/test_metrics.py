@@ -1,22 +1,36 @@
 #!/usr/bin/env python3
-"""
-Comprehensive test script for the metrics system.
+"""Test purpose: end-to-end checks for the metrics system.
 
-This test verifies:
-- All 8 metrics are properly registered
-- Individual metric computation works correctly
-- Engine orchestration produces valid NDJSON output
-- Score ranges and timing are reasonable
+What this file verifies
+- Registry: all expected metric implementations are registered (e.g., license,
+  ramp_up_time, bus_factor, performance_claims, size_score, dataset_and_code_score,
+  dataset_quality, code_quality).
+- Metric contracts: each metric’s factory().compute(ResourceBundle) returns a result
+  with:
+    • score in [0, 1]
+    • latency_ms >= 0
+    • notes present (string or similar)
+- Engine output: running the metrics engine (run_bundle) returns JSON/NDJSON with:
+    • required fields: URL, NetScore, NetScore_Latency
+    • for each metric: <name> and <name>_Latency
+    • NetScore ∈ [0,1] and lies within min/max of individual metric scores
+    • weights sum to ~1.0
+- Ecosystem awareness: scores respond to inputs as expected:
+    • dataset_quality increases when dataset URLs are present
+    • code_quality increases when code URLs are present
 
-Color coding:
-- [PASS] Green: Successful tests and validations
-- [FAIL] Red: Failed tests and errors  
-- [WARN] Yellow: Warnings and potential issues
-- [INFO] Blue: Informational messages
-- Headers: Purple/Bold for section titles
+How to run
+- Pytest (recommended):
+    python -m pytest -q -rs tests\\test_metrics.py
+- With coverage:
+    python -m pytest --cov=src --cov-report=term-missing -q tests\\test_metrics.py
+- Script mode (prints a colored summary without pytest):
+    python tests\\test_metrics.py
 
-Run from repo root: python tests/test_metrics.py
-Or with pytest: pytest tests/test_metrics.py -v
+Notes
+- Some checks are “pending-safe”: if certain metrics aren’t implemented yet,
+  the test skips instead of failing.
+- Uses the src/ layout via tests/conftest.py so `import app...` works without install.
 """
 
 import sys
