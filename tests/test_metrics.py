@@ -28,7 +28,7 @@ How to run
     python tests\\test_metrics.py
 
 Notes
-- Some checks are “pending-safe”: if certain metrics aren’t implemented yet,
+- Some checks are “pending-safe”: if certain metrics are not implemented yet,
   the test skips instead of failing.
 - Uses the src/ layout via tests/conftest.py so `import app...` works without install.
 """
