@@ -2,8 +2,10 @@ import re
 from datetime import datetime, timedelta
 from .base_metric import BaseMetric
 from .base import ResourceBundle
-from Url_Parser.Url_Parser import *
+from .registry import register
+from ..Url_Parser.Url_Parser import *
 
+@register("ramp_up_time")
 class RampUpTimeMetric(BaseMetric):
     name = "ramp_up_time"
 

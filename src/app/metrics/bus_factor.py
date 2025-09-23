@@ -2,7 +2,10 @@ import re
 from datetime import datetime, timedelta
 from .base_metric import BaseMetric
 from .base import ResourceBundle
-from Url_Parser.Url_Parser import *
+from .registry import register
+from ..Url_Parser.Url_Parser import *
+
+@register("bus_factor")
 class BusFactorMetric(BaseMetric):
     name = "bus_factor"
 
