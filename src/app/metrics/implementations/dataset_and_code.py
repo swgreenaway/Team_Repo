@@ -18,8 +18,13 @@ if _root_path not in sys.path:
 try:
     from Url_Parser import parse_huggingface_url
 except ImportError:
-    sys.path.insert(0, _root_path)
-    from Url_Parser import parse_huggingface_url
+    try:
+        sys.path.insert(0, _root_path)
+        from Url_Parser import parse_huggingface_url
+    except ImportError:
+        def parse_huggingface_url(url: str) -> Dict[str, Any]:
+            """Fallback URL parser."""
+            return {"type": "unknown", "url": url}
 
 from ..base import ResourceBundle
 from ..registry import register
