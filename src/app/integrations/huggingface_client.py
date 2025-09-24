@@ -72,7 +72,8 @@ class HuggingFaceClient:
                 repo_id=model_id,
                 filename="README.md",
                 repo_type="model",
-                token=None
+                token=None,
+                tqdm_class=None  # Disable progress bar
             )
             with open(readme_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -163,14 +164,23 @@ class HuggingFaceClient:
                 cache_path.mkdir(parents=True, exist_ok=True)
                 cache_dir = str(cache_path)
 
-            local_path = _with_retries(
-                snapshot_download,
-                repo_id=model_id,
-                cache_dir=cache_dir,
-                token=None,
-                allow_patterns=include_patterns,
-                ignore_patterns=ignore_patterns
-            )
+            # Disable progress bars by setting environment variable or using tqdm_class
+            import os
+            old_disable_progress = os.environ.get('HF_HUB_DISABLE_PROGRESS_BARS', '0')
+            os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+
+            try:
+                local_path = _with_retries(
+                    snapshot_download,
+                    repo_id=model_id,
+                    cache_dir=cache_dir,
+                    token=None,
+                    allow_patterns=include_patterns,
+                    ignore_patterns=ignore_patterns
+                )
+            finally:
+                # Restore original setting
+                os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = old_disable_progress
 
             return {
                 'success': True,
@@ -194,6 +204,9 @@ class HuggingFaceClient:
         try:
             try:
                 from transformers import AutoModel, AutoTokenizer, AutoConfig
+                # Suppress transformers logging and progress bars
+                import transformers
+                transformers.logging.set_verbosity_error()
             except ImportError:
                 return {
                     'success': False,
@@ -369,7 +382,8 @@ class HuggingFaceClient:
                 repo_id=dataset_id,
                 filename="README.md",
                 repo_type="dataset",
-                token=None
+                token=None,
+                tqdm_class=None  # Disable progress bar
             )
             with open(readme_path, 'r', encoding='utf-8') as f:
                 return f.read()
