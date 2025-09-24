@@ -29,13 +29,23 @@ def _extract_model_name(model_url: str) -> str:
     # Handle various HuggingFace URL formats
     # https://huggingface.co/google-bert/bert-base-uncased -> bert-base-uncased
     # https://huggingface.co/bert-base-uncased -> bert-base-uncased
+    # https://huggingface.co/openai/whisper-tiny/tree/main -> whisper-tiny
     # bert-base-uncased -> bert-base-uncased
 
     if "huggingface.co" in model_url:
-        parts = model_url.rstrip('/').split('/')
-        if len(parts) >= 2:
-            # Take the last part (model name)
-            return parts[-1]
+        # Remove trailing slash and split
+        url_path = model_url.rstrip('/').split('huggingface.co/')[-1]
+        path_parts = url_path.split('/')
+
+        # Handle URLs with /tree/, /blob/, /raw/ etc.
+        if len(path_parts) >= 2:
+            # Check if there's a /tree/, /blob/, etc. in the path
+            if len(path_parts) >= 3 and path_parts[2] in ['tree', 'blob', 'raw', 'resolve']:
+                # Format: org/model/tree/branch -> return model
+                return path_parts[1]
+            else:
+                # Format: org/model -> return model
+                return path_parts[1] if len(path_parts) > 1 else path_parts[0]
 
     # Direct model name or fallback
     model_name = model_url.split('/')[-1] if '/' in model_url else model_url
@@ -66,10 +76,10 @@ def _format_size_score(result: MetricResult) -> Dict[str, float]:
         # In a full implementation, the size metric should return device-specific scores
         score = result.score
         return {
-            "raspberry_pi": max(0.0, score - 0.6),  # Stricter for small devices
-            "jetson_nano": max(0.0, score - 0.3),
-            "desktop_pc": score,
-            "aws_server": score
+            "raspberry_pi": round(max(0.0, score - 0.6), 2),  # Stricter for small devices
+            "jetson_nano": round(max(0.0, score - 0.3), 2),
+            "desktop_pc": round(score, 2),
+            "aws_server": round(score, 2)
         }
 
 def compute_net_score(results: Dict[str, MetricResult], weights_profile: Dict[str, float]) -> float:
@@ -107,8 +117,8 @@ def compute_net_score(results: Dict[str, MetricResult], weights_profile: Dict[st
     
     return weighted_sum / weight_sum if weight_sum > 0 else 0.0
 
-def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult], 
-                        net_score: float, latency_ms: int) -> str:
+def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult],
+                        net_score: float, latency_ms: int, category: str = "MODEL") -> str:
     """
     Assemble NDJSON output row for a resource bundle.
     
@@ -120,6 +130,7 @@ def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult]
         results: Dictionary of metric results
         net_score: Computed weighted average score
         latency_ms: Total processing time for this bundle
+        category: Resource category (MODEL, DATASET, CODE)
         
     Returns:
         JSON string in NDJSON format for output
@@ -133,20 +144,10 @@ def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult]
     # Extract model name from URL for the expected format
     model_name = _extract_model_name(bundle.model_url)
 
-    # Import URL categorization to determine correct category
-    import sys
-    from pathlib import Path
-    root_path = str(Path(__file__).parent.parent.parent.parent)
-    if root_path not in sys.path:
-        sys.path.insert(0, root_path)
-
-    import Url_Parser
-    category = Url_Parser.categorize_url(bundle.model_url)
-
     # Start with required fields per specification (matching expected format exactly)
     ndjson_row = {
         "name": model_name,
-        "category": category,  # Correctly categorized as MODEL, DATASET, or CODE
+        "category": category,  # Category determined by caller based on CSV position
         "net_score": round(net_score, 2),  # 2 decimal precision to match expected
         "net_score_latency": latency_ms
     }
@@ -171,8 +172,8 @@ def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult]
     
     return json.dumps(ndjson_row)
 
-def run_bundle(bundle: ResourceBundle, metrics: List[Metric], 
-               weights_profile: Dict[str, float]) -> str:
+def run_bundle(bundle: ResourceBundle, metrics: List[Metric],
+               weights_profile: Dict[str, float], category: str = "MODEL") -> str:
     """
     Execute all metrics for a resource bundle and return NDJSON result.
     
@@ -185,6 +186,7 @@ def run_bundle(bundle: ResourceBundle, metrics: List[Metric],
         bundle: Resource bundle to evaluate (model + datasets + code)
         metrics: List of metric instances to execute
         weights_profile: Weight configuration for NetScore calculation
+        category: Resource category (MODEL, DATASET, CODE)
         
     Returns:
         NDJSON string ready for output
@@ -232,4 +234,4 @@ def run_bundle(bundle: ResourceBundle, metrics: List[Metric],
     # Total processing time for this bundle
     total_latency_ms = int((perf_counter_ns() - t0) / 1_000_000)
     
-    return assemble_ndjson_row(bundle, results, net_score, total_latency_ms)
+    return assemble_ndjson_row(bundle, results, net_score, total_latency_ms, category)

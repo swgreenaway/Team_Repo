@@ -1,11 +1,28 @@
 import time
 import sys
+import os
 import Url_Parser
 import Installer
 import Tester
 from pathlib import Path
 from typing import Dict, Any, List
 import json
+
+# Suppress HuggingFace symlink warning on Windows
+os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
+
+# Suppress transformers progress bars and warnings
+os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = '1'
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
+os.environ['HF_HUB_VERBOSITY'] = 'error'
+os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
+
+# Also suppress at the library level if already imported
+try:
+    import transformers
+    transformers.logging.set_verbosity_error()
+except ImportError:
+    pass
 
 def install_dependencies() -> int:
     return Installer.run()
@@ -22,69 +39,83 @@ def run_tests(pytest_args=None) -> int:
 
 
 def process_urls(file_path: Path) -> int:
+    # Add src to path for imports
+    import sys
+    from pathlib import Path
+
+    ROOT = Path(__file__).resolve().parent
+    SRC = ROOT / "src"
+    if str(SRC) not in sys.path:
+        sys.path.insert(0, str(SRC))
+
+    from app.dataset_tracker import DatasetTracker
+
+    # Initialize dataset tracker for this session
+    dataset_tracker = DatasetTracker()
+
     with file_path.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 # Check if line contains comma-separated URLs (grouped evaluation)
                 if ',' in line:
-                    process_url_group(line)
+                    process_url_group(line, dataset_tracker)
                 else:
                     # Single URL - traditional processing
                     process_url(line)
     return 0
 
-def process_url_group(url_group: str) -> int:
+def process_url_group(url_group: str, dataset_tracker=None) -> int:
     """
-    Run metrics evaluation for a group of related URLs (model, datasets, code).
+    Run metrics evaluation for a group of related URLs in CSV format.
+
+    Format: <code_link>, <dataset_link>, <model_link>
+    Where code_link and dataset_link can be blank.
 
     Args:
-        url_group: Comma-separated URLs representing related resources
+        url_group: Comma-separated line with code, dataset, model URLs
 
     Returns:
         0 on success, non-zero on error
     """
     try:
-        # Parse comma-separated URLs
-        urls = [url.strip() for url in url_group.split(',') if url.strip()]
-        if not urls:
-            print("Error: No valid URLs found in group", file=sys.stderr)
+        # Parse CSV format: code_link, dataset_link, model_link
+        parts = url_group.split(',')
+        if len(parts) != 3:
+            print(f"Error: Expected 3 comma-separated values, got {len(parts)}", file=sys.stderr)
             return 1
 
-        # Import URL categorization
-        import Url_Parser
+        code_url = parts[0].strip() if parts[0].strip() else None
+        dataset_url = parts[1].strip() if parts[1].strip() else None
+        model_url = parts[2].strip() if parts[2].strip() else None
 
-        # Categorize URLs
-        model_urls = []
-        dataset_urls = []
-        code_urls = []
+        if not model_url:
+            print("Error: Model URL (third field) is required", file=sys.stderr)
+            return 1
 
-        for url in urls:
-            category = Url_Parser.categorize_url(url)
-            if category == "MODEL":
-                model_urls.append(url)
-            elif category == "DATASET":
-                dataset_urls.append(url)
-            elif category == "CODE":
-                code_urls.append(url)
+        # Handle dataset tracking and inference
+        if dataset_url:
+            # Dataset explicitly provided - add to tracker
+            if dataset_tracker:
+                dataset_tracker.add_dataset(dataset_url)
+            dataset_urls = [dataset_url]
+        else:
+            # Dataset missing - try to infer from model README
+            if dataset_tracker:
+                inferred_dataset = dataset_tracker.infer_dataset(model_url)
+                dataset_urls = [inferred_dataset] if inferred_dataset else []
             else:
-                print(f"Warning: Unknown URL type for {url}", file=sys.stderr)
+                dataset_urls = []
 
-        # Determine primary model URL
-        if not model_urls:
-            print("Error: No model URL found in group. At least one HuggingFace model URL is required.", file=sys.stderr)
-            return 1
+        # Prepare code URL list
+        code_urls = [code_url] if code_url else []
 
-        # Use first model URL as primary (could be enhanced to handle multiple models)
-        primary_model = model_urls[0]
-        if len(model_urls) > 1:
-            print(f"Warning: Multiple model URLs found. Using {primary_model} as primary.", file=sys.stderr)
-
-        # Run grouped evaluation
+        # Run grouped evaluation - all entries in CSV are model evaluations
         result = run_metrics(
-            model_url=primary_model,
+            model_url=model_url,
             dataset_urls=dataset_urls,
-            code_urls=code_urls
+            code_urls=code_urls,
+            category="MODEL"
         )
         print(result)
         return 0
@@ -93,19 +124,20 @@ def process_url_group(url_group: str) -> int:
         print(f"Error evaluating URL group {url_group}: {e}", file=sys.stderr)
         return 1
 
+
+
 def process_url(url: str) -> int:
     """
     Run metrics evaluation for a single URL.
+    Treats all single URLs as model URLs for evaluation.
 
     Args:
-        url: Single model URL to evaluate
+        url: Single URL to evaluate as a model
 
     Returns:
         0 on success, non-zero on error
     """
     try:
-        # For now, treat the single URL as a model URL
-        # In the future, this could be enhanced to detect URL type
         result = run_metrics(model_url=url)
         print(result)
         return 0
@@ -114,7 +146,7 @@ def process_url(url: str) -> int:
         return 1
 
 
-def run_metrics(model_url: str, dataset_urls: List[str] = None, code_urls: List[str] = None, weights: Dict[str, float] = None, use_cache: bool = True) -> str:
+def run_metrics(model_url: str, dataset_urls: List[str] = None, code_urls: List[str] = None, weights: Dict[str, float] = None, use_cache: bool = True, category: str = "MODEL") -> str:
     """
     Run the metrics system on a given model with optional dataset and code URLs.
 
@@ -189,7 +221,7 @@ def run_metrics(model_url: str, dataset_urls: List[str] = None, code_urls: List[
         metrics = [factory() for factory in metric_factories.values()]
 
         # Run the metrics engine
-        result = run_bundle(resource_bundle, metrics, weights)
+        result = run_bundle(resource_bundle, metrics, weights, category)
 
         # Cache the result if caching is enabled
         if use_cache:
