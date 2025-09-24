@@ -13,6 +13,65 @@ import json
 from typing import Dict, Any, List
 from .base import MetricResult, ResourceBundle, Metric
 
+def _extract_model_name(model_url: str) -> str:
+    """
+    Extract model name from HuggingFace URL.
+
+    Args:
+        model_url: Full model URL
+
+    Returns:
+        Model name without organization prefix (e.g., "bert-base-uncased")
+    """
+    if not model_url:
+        return "unknown"
+
+    # Handle various HuggingFace URL formats
+    # https://huggingface.co/google-bert/bert-base-uncased -> bert-base-uncased
+    # https://huggingface.co/bert-base-uncased -> bert-base-uncased
+    # bert-base-uncased -> bert-base-uncased
+
+    if "huggingface.co" in model_url:
+        parts = model_url.rstrip('/').split('/')
+        if len(parts) >= 2:
+            # Take the last part (model name)
+            return parts[-1]
+
+    # Direct model name or fallback
+    model_name = model_url.split('/')[-1] if '/' in model_url else model_url
+    return model_name
+
+def _format_size_score(result: MetricResult) -> Dict[str, float]:
+    """
+    Format size score as device compatibility object.
+
+    Args:
+        result: MetricResult from size_score metric
+
+    Returns:
+        Dict with device-specific scores or default structure if unavailable
+    """
+    # If the size metric computed device scores, they should be in the result
+    # For now, create a default structure since the current size metric returns a single score
+    if result.score == 0.0:
+        # No size data available
+        return {
+            "raspberry_pi": 0.0,
+            "jetson_nano": 0.0,
+            "desktop_pc": 0.0,
+            "aws_server": 0.0
+        }
+    else:
+        # Map single score to device categories (this is a simplified mapping)
+        # In a full implementation, the size metric should return device-specific scores
+        score = result.score
+        return {
+            "raspberry_pi": max(0.0, score - 0.6),  # Stricter for small devices
+            "jetson_nano": max(0.0, score - 0.3),
+            "desktop_pc": score,
+            "aws_server": score
+        }
+
 def compute_net_score(results: Dict[str, MetricResult], weights_profile: Dict[str, float]) -> float:
     """
     Compute weighted NetScore from individual metric results.
@@ -71,19 +130,39 @@ def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult]
     - Configurable precision for score rounding
     - Include metric notes in debug mode
     """
-    # Start with required fields per specification
+    # Extract model name from URL for the expected format
+    model_name = _extract_model_name(bundle.model_url)
+
+    # Import URL categorization to determine correct category
+    import sys
+    from pathlib import Path
+    root_path = str(Path(__file__).parent.parent.parent.parent)
+    if root_path not in sys.path:
+        sys.path.insert(0, root_path)
+
+    import Url_Parser
+    category = Url_Parser.categorize_url(bundle.model_url)
+
+    # Start with required fields per specification (matching expected format exactly)
     ndjson_row = {
-        "URL": bundle.model_url,
-        "NetScore": round(net_score, 3),         # 3 decimal precision per spec
-        "NetScore_Latency": latency_ms
+        "name": model_name,
+        "category": category,  # Correctly categorized as MODEL, DATASET, or CODE
+        "net_score": round(net_score, 2),  # 2 decimal precision to match expected
+        "net_score_latency": latency_ms
     }
-    
+
     # Add individual metric scores and their latencies
     # Sorted by metric name for consistent output ordering
     for metric_name in sorted(results.keys()):
         result = results[metric_name]
-        ndjson_row[metric_name] = round(result.score, 3)
-        ndjson_row[f"{metric_name}_Latency"] = result.latency_ms
+
+        # Handle size_score specially - it should be an object with device scores
+        if metric_name == "size_score":
+            ndjson_row[metric_name] = _format_size_score(result)
+        else:
+            ndjson_row[metric_name] = round(result.score, 2)  # 2 decimal precision
+
+        ndjson_row[f"{metric_name}_latency"] = result.latency_ms
     
     # TODO: In debug mode, could also include:
     # - ndjson_row["_debug_notes"] = {name: result.notes for name, result in results.items()}

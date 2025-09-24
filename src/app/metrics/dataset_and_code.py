@@ -1,8 +1,8 @@
 import re
-from .base import ResourceBundle
-from .registry import register
-from .base_metric import BaseMetric
-from ..Url_Parser.Url_Parser import *
+from app.metrics.base import ResourceBundle
+from app.metrics.registry import register
+from app.metrics.base_metric import BaseMetric
+from app.Url_Parser.Url_Parser import *
 
 @register("dataset_and_code_score")
 class DatasetAndCodeScoreMetric(BaseMetric):
@@ -16,7 +16,7 @@ class DatasetAndCodeScoreMetric(BaseMetric):
         """
         Evaluate presence of dataset and code references through simple checks.
         """
-        r = requests.get(HF_API_MODEL.format(repo_id=resource.model_id), timeout=10)
+        r = requests.get(HF_API_MODEL.format(model_id=resource.model_id), timeout=10)
         r.raise_for_status()
         data = r.json()
         readme = data.get("cardData", {}).get("README", "").lower()
