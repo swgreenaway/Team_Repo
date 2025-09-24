@@ -1,46 +1,7 @@
 """
-HuggingFace API client wrapper with authentication and error handling.
-
-Centralized way to interact with HuggingFace APIs across metrics.
-
-How to use this:
------------
-from integrations.huggingface_client import hf_client
-
-# Get model information
-info = hf_client.get_model_info("bert-base-uncased")
-if info and 'error' not in info:
-    print(f"Model has {info['model_info'].downloads} downloads")
-
-# Get model card data
-card = hf_client.get_model_card_data("bert-base-uncased")
-if card:
-    print(f"Datasets: {card.get('datasets', [])}")
-
-# Get README content
-readme = hf_client.get_model_readme("bert-base-uncased")
-if readme:
-    print(f"README length: {len(readme)} chars")
-
-# Test connection
-status = hf_client.test_connection()
-print(f"Connected: {status['connection_ok']}")
-
-# Download a model locally
-download_result = hf_client.download_model("distilbert-base-uncased",
-                                         cache_dir="models/distilbert")
-if download_result['success']:
-    print(f"Downloaded to: {download_result['local_path']}")
-
-# Load model for inference
-model_result = hf_client.load_model_for_inference("distilbert-base-uncased")
-if model_result['success']:
-    model = model_result['model']
-    tokenizer = model_result['tokenizer']
-    # Use model and tokenizer for inference...
+HuggingFace API client wrapper (anonymous/no-token)
 """
 
-import os
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
@@ -48,180 +9,165 @@ from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.utils import HfHubHTTPError
 
 
-def _load_env_file():
-    """Load environment variables from .env file in integrations folder."""
-    env_file = Path(__file__).parent / ".env"
-    if env_file.exists():
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key.strip()] = value.strip()
+def _with_retries(callable_fn, *args, **kwargs):
+    """Basic exponential backoff retry for 429 (rate limit) & transient 5xx."""
+    import time
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            return callable_fn(*args, **kwargs)
+        except HfHubHTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
 
 
 class HuggingFaceClient:
     """
-    Centralized HuggingFace API client with authentication and error handling.
-
-    Automatically loads HUGGINGFACE_TOKEN from environment and provides
-    convenient methods for common operations across metrics.
+    Centralized HuggingFace API client (anonymous).
+    No token is read or used. All calls are unauthenticated.
     """
 
     def __init__(self):
-        """Initialize client with token from environment."""
-        # Load .env file if it exists
-        _load_env_file()
-
-        # Get token from environment
-        self.token = os.getenv('HUGGINGFACE_TOKEN')
-        self.api = HfApi(token=self.token) if self.token else HfApi()
+        # Anonymous API client (token=None)
+        self.token = None
+        self.api = HfApi(token=None)
 
     def get_model_info(self, model_id: str, include_files: bool = False) -> Optional[Dict[str, Any]]:
         """
-        Fetch model information from HuggingFace.
-
-        Args:
-            model_id: HuggingFace model identifier (e.g., "bert-base-uncased")
-            include_files: Whether to include file metadata
+        Fetch model information from HuggingFace (public models only).
 
         Returns:
-            Dictionary with model information or None if failed
+            {'model_info': ModelInfo, 'model_id': str, 'has_token': False}
+            or {'error': str} on failure.
         """
         try:
-            model_info = self.api.model_info(model_id, files_metadata=include_files)
+            model_info = _with_retries(self.api.model_info, model_id, files_metadata=include_files)
             return {
                 'model_info': model_info,
                 'model_id': model_id,
-                'has_token': self.token is not None
+                'has_token': False
             }
         except HfHubHTTPError as e:
-            error_msg = f'HTTP error {e.response.status_code}'
-            if e.response.status_code == 401:
-                error_msg = 'Authentication failed - check HUGGINGFACE_TOKEN'
-            elif e.response.status_code == 404:
-                error_msg = f'Model {model_id} not found'
-            elif e.response.status_code == 429:
-                error_msg = 'Rate limited - too many requests'
-            print(f"HuggingFace API error for {model_id}: {error_msg}")
-            return {'error': error_msg}
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 401:
+                return {'error': 'Authentication required for this repository (gated/private).'}
+            if status == 404:
+                return {'error': f'Model {model_id} not found'}
+            if status == 429:
+                return {'error': 'Rate limited (anonymous). Please retry later.'}
+            return {'error': f'HTTP error {status or "unknown"}'}
         except Exception as e:
-            error_msg = f'Unexpected error: {str(e)}'
-            print(f"HuggingFace API error for {model_id}: {error_msg}")
-            return {'error': error_msg}
+            return {'error': f'Unexpected error: {e}'}
 
     def get_model_readme(self, model_id: str) -> Optional[str]:
         """
-        Download and read model README.md content.
-
-        Args:
-            model_id: HuggingFace model identifier
-
-        Returns:
-            README content as string or None if failed
+        Download and return README.md content for a public model.
         """
         try:
-            readme_path = hf_hub_download(
+            readme_path = _with_retries(
+                hf_hub_download,
                 repo_id=model_id,
                 filename="README.md",
                 repo_type="model",
-                token=self.token
+                token=None
             )
-
             with open(readme_path, 'r', encoding='utf-8') as f:
                 return f.read()
-
         except Exception:
             return None
 
     def get_model_card_data(self, model_id: str) -> Optional[Dict[str, Any]]:
         """
-        Extract structured data from model card.
-
-        Args:
-            model_id: HuggingFace model identifier
-
-        Returns:
-            Dictionary with card data or None if failed
+        Extract structured data from the model card (public models).
         """
         try:
-            model_info = self.api.model_info(model_id)
+            info = _with_retries(self.api.model_info, model_id)
+            card = getattr(info, "cardData", None)
+            if not card:
+                return {}
 
-            if hasattr(model_info, 'cardData') and model_info.cardData:
-                card_data = model_info.cardData
+            # cardData may be a dict-like or an object depending on hub libs/versions
+            def _get(src, key, default=None):
+                if isinstance(src, dict):
+                    return src.get(key, default)
+                return getattr(src, key, default)
 
-                # Extract common fields
-                result = {
-                    'datasets': getattr(card_data, 'datasets', []),
-                    'language': getattr(card_data, 'language', []),
-                    'license': getattr(card_data, 'license', None),
-                    'tags': getattr(card_data, 'tags', []),
-                    'metrics': getattr(card_data, 'metrics', []),
-                    'library_name': getattr(card_data, 'library_name', None),
-                }
+            result = {
+                'datasets': _get(card, 'datasets', []),
+                'language': _get(card, 'language', []),
+                'license': _get(card, 'license', None),
+                'tags': _get(card, 'tags', []),
+                'metrics': _get(card, 'metrics', []),
+                'library_name': _get(card, 'library_name', None),
+            }
 
-                # Add any other fields that might be present
-                for attr in dir(card_data):
+            # Add other non-private fields if present
+            if not isinstance(card, dict):
+                for attr in dir(card):
                     if not attr.startswith('_') and attr not in result:
                         try:
-                            value = getattr(card_data, attr)
-                            if not callable(value):
-                                result[attr] = value
-                        except:
+                            val = getattr(card, attr)
+                            if not callable(val):
+                                result[attr] = val
+                        except Exception:
                             pass
+            else:
+                for k, v in card.items():
+                    if k not in result:
+                        result[k] = v
 
-                return result
+            return result
 
-            return {}
-
+        except HfHubHTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in (401, 403):
+                return {'error': 'Authentication required for this repository (gated/private).'}
+            if status == 404:
+                return {'error': f'Model {model_id} not found'}
+            if status == 429:
+                return {'error': 'Rate limited (anonymous). Please retry later.'}
+            return {'error': f'HTTP error {status or "unknown"}'}
         except Exception:
             return None
 
     def search_models(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Search for models on HuggingFace Hub.
-
-        Args:
-            query: Search query
-            limit: Maximum number of results
-
-        Returns:
-            List of model information dictionaries
+        Anonymous search for public models.
         """
         try:
-            models = self.api.list_models(search=query, limit=limit)
-            return [{'id': model.modelId, 'downloads': model.downloads} for model in models]
+            models = _with_retries(self.api.list_models, search=query, limit=limit)
+            return [{'id': m.modelId, 'downloads': getattr(m, 'downloads', None)} for m in models]
         except Exception:
             return []
 
-    def download_model(self, model_id: str, cache_dir: Optional[str] = None,
-                       include_patterns: Optional[List[str]] = None,
-                       ignore_patterns: Optional[List[str]] = None) -> Dict[str, Any]:
+    def download_model(
+        self,
+        model_id: str,
+        cache_dir: Optional[str] = None,
+        include_patterns: Optional[List[str]] = None,
+        ignore_patterns: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """
-        Download a complete model to local storage.
-
-        Args:
-            model_id: HuggingFace model identifier (e.g., "bert-base-uncased")
-            cache_dir: Local directory to store the model (defaults to HF cache)
-            include_patterns: Patterns for files to include (e.g., ["*.json", "*.bin"])
-            ignore_patterns: Patterns for files to ignore (e.g., ["*.h5"])
-
-        Returns:
-            Dictionary with download results including local path
+        Download a public model snapshot to local storage (anonymous).
         """
         try:
-            # Set up cache directory relative to project if specified
+            # Honor optional cache_dir relative to project root (keep same behavior)
             if cache_dir:
+                # Adjust this root jump if your project layout differs
+                # (kept identical to your original for drop-in compatibility)
                 project_root = Path(__file__).parent.parent.parent.parent
                 cache_path = project_root / cache_dir
                 cache_path.mkdir(parents=True, exist_ok=True)
                 cache_dir = str(cache_path)
 
-            # Download the model
-            local_path = snapshot_download(
+            local_path = _with_retries(
+                snapshot_download,
                 repo_id=model_id,
                 cache_dir=cache_dir,
-                token=self.token,
+                token=None,
                 allow_patterns=include_patterns,
                 ignore_patterns=ignore_patterns
             )
@@ -233,45 +179,34 @@ class HuggingFaceClient:
                 'cache_dir': cache_dir
             }
 
+        except HfHubHTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            msg = 'Authentication required for this repository (gated/private).' if status in (401, 403) else f'HTTP error {status or "unknown"}'
+            return {'success': False, 'error': msg, 'model_id': model_id}
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e),
-                'model_id': model_id
-            }
+            return {'success': False, 'error': str(e), 'model_id': model_id}
 
     def load_model_for_inference(self, model_id: str, local_path: Optional[str] = None) -> Dict[str, Any]:
         """
-        Load a model and tokenizer for inference from local storage.
-
-        Args:
-            model_id: HuggingFace model identifier
-            local_path: Path to locally downloaded model (if None, downloads automatically)
-
-        Returns:
-            Dictionary with loaded model, tokenizer, and metadata
+        Load a model/tokenizer from local disk for inference (no remote auth).
+        If local_path is None, downloads snapshot anonymously first.
         """
         try:
-            # Import transformers here to avoid requiring it if not used
             try:
                 from transformers import AutoModel, AutoTokenizer, AutoConfig
             except ImportError:
                 return {
                     'success': False,
-                    'error': 'transformers library not installed. Install with: pip install transformers'
+                    'error': 'transformers not installed. Install with: pip install transformers'
                 }
 
-            # Download model if not provided locally
             if local_path is None:
-                download_result = self.download_model(model_id)
-                if not download_result['success']:
-                    return download_result
-                local_path = download_result['local_path']
+                dl = self.download_model(model_id)
+                if not dl.get('success'):
+                    return dl
+                local_path = dl['local_path']
 
-            # Load config to determine model type
             config = AutoConfig.from_pretrained(local_path, local_files_only=True)
-
-            # Load tokenizer and model
             tokenizer = AutoTokenizer.from_pretrained(local_path, local_files_only=True)
             model = AutoModel.from_pretrained(local_path, local_files_only=True)
 
@@ -285,34 +220,178 @@ class HuggingFaceClient:
             }
 
         except Exception as e:
+            return {'success': False, 'error': str(e), 'model_id': model_id}
+
+    def get_dataset_info(self, dataset_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch dataset information from HuggingFace (public datasets only).
+
+        Args:
+            dataset_id: Dataset identifier (e.g., "squad", "glue")
+
+        Returns:
+            Dict with dataset info or error message
+        """
+        try:
+            dataset_info = _with_retries(self.api.dataset_info, dataset_id)
             return {
-                'success': False,
-                'error': str(e),
-                'model_id': model_id
+                'dataset_info': dataset_info,
+                'dataset_id': dataset_id,
+                'has_token': False
             }
+        except HfHubHTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 401:
+                return {'error': 'Authentication required for this dataset (gated/private).'}
+            if status == 404:
+                return {'error': f'Dataset {dataset_id} not found'}
+            if status == 429:
+                return {'error': 'Rate limited (anonymous). Please retry later.'}
+            return {'error': f'HTTP error {status or "unknown"}'}
+        except Exception as e:
+            return {'error': f'Unexpected error: {e}'}
+
+    def get_dataset_card_data(self, dataset_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract structured data from the dataset card (public datasets).
+
+        Args:
+            dataset_id: Dataset identifier
+
+        Returns:
+            Dict with dataset metadata or None on failure
+        """
+        try:
+            info = _with_retries(self.api.dataset_info, dataset_id)
+            card = getattr(info, "cardData", None)
+            if not card:
+                return {}
+
+            def _get(src, key, default=None):
+                if isinstance(src, dict):
+                    return src.get(key, default)
+                return getattr(src, key, default)
+
+            result = {
+                'language': _get(card, 'language', []),
+                'license': _get(card, 'license', None),
+                'tags': _get(card, 'tags', []),
+                'task_categories': _get(card, 'task_categories', []),
+                'task_ids': _get(card, 'task_ids', []),
+                'multilinguality': _get(card, 'multilinguality', None),
+                'size_categories': _get(card, 'size_categories', []),
+                'source_datasets': _get(card, 'source_datasets', []),
+            }
+
+            # Add dataset-specific metadata
+            if hasattr(info, 'downloads'):
+                result['downloads'] = info.downloads
+            if hasattr(info, 'likes'):
+                result['likes'] = info.likes
+            if hasattr(info, 'created_at'):
+                result['created_at'] = str(info.created_at)
+            if hasattr(info, 'last_modified'):
+                result['last_modified'] = str(info.last_modified)
+
+            # Add other fields if present
+            if not isinstance(card, dict):
+                for attr in dir(card):
+                    if not attr.startswith('_') and attr not in result:
+                        try:
+                            val = getattr(card, attr)
+                            if not callable(val):
+                                result[attr] = val
+                        except Exception:
+                            pass
+            else:
+                for k, v in card.items():
+                    if k not in result:
+                        result[k] = v
+
+            return result
+
+        except HfHubHTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status in (401, 403):
+                return {'error': 'Authentication required for this dataset (gated/private).'}
+            if status == 404:
+                return {'error': f'Dataset {dataset_id} not found'}
+            if status == 429:
+                return {'error': 'Rate limited (anonymous). Please retry later.'}
+            return {'error': f'HTTP error {status or "unknown"}'}
+        except Exception:
+            return None
+
+    def search_datasets(self, query: str = None, limit: int = 10, task: str = None) -> List[Dict[str, Any]]:
+        """
+        Anonymous search for public datasets.
+
+        Args:
+            query: Search query string
+            limit: Maximum number of results
+            task: Filter by task category
+
+        Returns:
+            List of dataset info dictionaries
+        """
+        try:
+            datasets = _with_retries(
+                self.api.list_datasets,
+                search=query,
+                limit=limit,
+                task=task
+            )
+            return [
+                {
+                    'id': d.id,
+                    'downloads': getattr(d, 'downloads', None),
+                    'likes': getattr(d, 'likes', None),
+                    'tags': getattr(d, 'tags', [])
+                }
+                for d in datasets
+            ]
+        except Exception:
+            return []
+
+    def get_dataset_readme(self, dataset_id: str) -> Optional[str]:
+        """
+        Download and return README.md content for a public dataset.
+
+        Args:
+            dataset_id: Dataset identifier
+
+        Returns:
+            README content as string or None on failure
+        """
+        try:
+            readme_path = _with_retries(
+                hf_hub_download,
+                repo_id=dataset_id,
+                filename="README.md",
+                repo_type="dataset",
+                token=None
+            )
+            with open(readme_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception:
+            return None
 
     def test_connection(self) -> Dict[str, Any]:
         """
-        Test the connection and authentication status.
-
-        Returns:
-            Dictionary with connection status information
+        Simple anonymous connectivity check.
         """
         result = {
-            'has_token': self.token is not None,
-            'token_length': len(self.token) if self.token else 0,
+            'has_token': False,
+            'token_length': 0,
             'connection_ok': False,
             'error': None
         }
-
         try:
-            # Try a simple API call
-            models = list(self.api.list_models(limit=1))
+            models = list(_with_retries(self.api.list_models, limit=1))
             result['connection_ok'] = True
             result['sample_model'] = models[0].modelId if models else None
         except Exception as e:
             result['error'] = str(e)
-
         return result
 
 
