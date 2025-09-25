@@ -11,8 +11,30 @@ def validate_environment_variables():
         print("Error: GITHUB_TOKEN environment variable is not set or is empty.", file=sys.stderr)
         sys.exit(1)
 
+    # Check if GitHub token is valid by making a simple API call
+    try:
+        import requests
+        response = requests.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"token {github_token}"},
+            timeout=10
+        )
+        if response.status_code != 200:
+            print("Error: GITHUB_TOKEN is invalid or expired.", file=sys.stderr)
+            sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print(f"Error: Unable to validate GITHUB_TOKEN due to network error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ImportError:
+        # If requests is not available, skip validation but warn
+        print("Warning: Cannot validate GITHUB_TOKEN - requests library not available.", file=sys.stderr)
+
     # Validate log file path
-    log_file = os.getenv("LOG_FILE", "app.log")
+    log_file = os.getenv("LOG_FILE")
+    if not log_file:
+        print("Error: LOG_FILE environment variable is not set.", file=sys.stderr)
+        sys.exit(1)
+
     log_path = Path(log_file)
 
     # Check if the parent directory exists and is writable
