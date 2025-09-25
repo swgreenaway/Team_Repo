@@ -2,6 +2,7 @@
 import argparse, sys, os
 from pathlib import Path
 import Orchestrator
+from Logger import validate_log_file_or_die #new import
 
 def validate_environment_variables():
     """Validate required environment variables at startup."""
@@ -40,6 +41,7 @@ def validate_environment_variables():
 def main(argv=None) -> int:
     # Validate environment variables at startup
     validate_environment_variables()
+    validate_log_file_or_die()
 
     if argv is None:
         argv = sys.argv[1:]
