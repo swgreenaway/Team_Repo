@@ -29,39 +29,36 @@ def validate_log_file_or_die() -> None:
     if raw is None:
         return  # not set -> do nothing
 
-    # Normalize and validate non-empty
-    path = raw.strip()
-    if not path:
+    p = raw.strip()
+    if not p:
         sys.stderr.write("ERROR: LOG_FILE is empty or whitespace.\n")
         sys.exit(1)
 
-    # Expand ~ and env vars for robustness
-    path = os.path.expanduser(os.path.expandvars(path))
+    p = os.path.expanduser(os.path.expandvars(p))
 
-    # Must NOT be a directory (catch trailing separators and actual dirs)
-    if path.endswith(os.sep) or (os.altsep and path.endswith(os.altsep)) or os.path.isdir(path):
+    # reject directories (incl. trailing slash) 
+    if p.endswith(os.sep) or (os.altsep and p.endswith(os.altsep)) or os.path.isdir(p):
         sys.stderr.write(f"ERROR: LOG_FILE points to a directory: {raw}\n")
         sys.exit(1)
 
-    parent = os.path.dirname(path) or "."
-    # Parent must exist (do NOT create it)
+    parent = os.path.dirname(p) or "."
     if not os.path.isdir(parent):
         sys.stderr.write(f"ERROR: LOG_FILE parent dir does not exist: {parent}\n")
         sys.exit(1)
 
-    # Parent should be writable; final check is an actual open() attempt
-    if not os.access(parent, os.W_OK):
-        sys.stderr.write(f"ERROR: LOG_FILE parent not writable: {parent}\n")
+    # MUST already exist (do not create)
+    if not os.path.isfile(p):
+        sys.stderr.write(f"ERROR: LOG_FILE does not exist: {p}\n")
         sys.exit(1)
 
-    # File must be openable for append (create if missing)
+    # MUST be writable without creating/truncating
     try:
-        with open(path, "a", encoding="utf-8"):
+        with open(p, "r+", encoding="utf-8"):
             pass
     except Exception as e:
-        sys.stderr.write(f"ERROR: invalid LOG_FILE={path}: {e}\n")
+        sys.stderr.write(f"ERROR: LOG_FILE not writable: {p}: {e}\n")
         sys.exit(1)
-        
+
 def get_logger(name: str):
     """
     Return a logger tagged with the given module name.\n
