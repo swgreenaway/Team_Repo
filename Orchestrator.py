@@ -29,13 +29,60 @@ def install_dependencies() -> int:
     
 
 def run_tests(pytest_args=None) -> int:
+    import sys, json
+    from pathlib import Path
+
+    # Preserve current behavior: grab args after "test" if pytest_args not provided
     if pytest_args is None:
         try:
             i = sys.argv.index("test")
             pytest_args = sys.argv[i+1:]   # everything after 'test'
         except ValueError:
             pytest_args = []
-    return Tester.run(pytest_args=pytest_args)
+
+    # Ensure we get machine-readable outputs to parse
+    extra = []
+
+    # Coverage: default to src if user didn't specify --cov
+    if not any(a == "--cov" or a.startswith("--cov=") for a in pytest_args):
+        extra += ["--cov=src"]  # change 'src' if your package path differs
+
+    # Always produce a JSON coverage artifact
+    if not any(a.startswith("--cov-report=") and "json:" in a for a in pytest_args):
+        extra += ["--cov-report=json:coverage.json"]
+    # Keep terminal coverage too (optional)
+    if not any(a.startswith("--cov-report=") and ("term" in a or "term-missing" in a) for a in pytest_args):
+        extra += ["--cov-report=term-missing"]
+
+    # Emit a JSON pytest report (requires pytest-json-report)
+    if "--json-report" not in pytest_args:
+        extra += ["--json-report"]
+    if not any(a.startswith("--json-report-file=") for a in pytest_args):
+        extra += ["--json-report-file=.report.json"]
+
+    # Run tests via your existing Tester
+    exit_code = Tester.run(pytest_args=pytest_args + extra)
+
+    # Parse and print: "X/Y test cases passed. Z% line coverage achieved."
+    try:
+        rpt = json.loads(Path(".report.json").read_text())
+        cov = json.loads(Path("coverage.json").read_text())
+
+        passed = int(rpt["summary"]["passed"])
+        total  = int(rpt["summary"]["total"])
+
+        # pytest-cov JSON schema: totals.percent_covered (float)
+        pct = float(cov["totals"]["percent_covered"])
+        pct_str = f"{pct:.2f}".rstrip("0").rstrip(".")
+
+        print(f"{passed}/{total} test cases passed. {pct_str}% line coverage achieved.")
+    except FileNotFoundError:
+        print("Note: missing .report.json or coverage.json. "
+              "Install/enable plugins: pytest-json-report and pytest-cov.")
+    except Exception as e:
+        print(f"Summary generation failed: {e}")
+
+    return exit_code
 
 
 def process_urls(file_path: Path) -> int:
