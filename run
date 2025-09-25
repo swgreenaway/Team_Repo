@@ -25,17 +25,20 @@ def validate_environment_variables():
     except requests.exceptions.RequestException as e:
         # print(f"Error: Unable to validate GITHUB_TOKEN due to network error: {e}", file=sys.stderr)
         sys.exit(1)
-    except ImportError:
-        # If requests is not available, skip validation but warn
-        # print("Warning: Cannot validate GITHUB_TOKEN - requests library not available.", file=sys.stderr)
 
     # Validate log file path
     log_file = os.getenv("LOG_FILE")
-    if not log_file:
-        # print("Error: LOG_FILE environment variable is not set.", file=sys.stderr)
-        sys.exit(1)
-
-    log_path = Path(log_file)
+    if log_file:
+        parent = os.path.dirname(log_file) or "."
+        if not os.path.isdir(parent):
+            sys.stderr.write(f"ERROR: LOG_FILE parent dir does not exist: {parent}\n")
+            sys.exit(1)
+        try:
+            with open(log_file, "a", encoding="utf-8"):
+                pass
+        except Exception as e:
+            sys.stderr.write(f"ERROR: invalid LOG_FILE={log_file}: {e}\n")
+            sys.exit(1)
 
     # Check if the parent directory exists and is writable
     try:
