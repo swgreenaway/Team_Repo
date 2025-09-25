@@ -26,7 +26,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from app.metrics.implementations.size import SizeScoreMetric, _is_weight_file, _extract_model_id_from_url
+from app.metrics.size import SizeScoreMetric, _is_weight_file, _extract_model_id_from_url
 from app.metrics.base import ResourceBundle
 from app.metrics.registry import all_metrics
 
@@ -143,7 +143,7 @@ def test_device_scoring():
     print("✓ Device scoring logic working correctly")
 
 
-@patch('app.metrics.implementations.size.hf_client')
+@patch('app.metrics.size.hf_client')
 def test_fetch_model_size_success(mock_hf_client):
     """Test successful model size fetching."""
     print("Testing successful model size fetching...")
@@ -170,7 +170,7 @@ def test_fetch_model_size_success(mock_hf_client):
     mock_path.exists.return_value = True
     mock_path.rglob.return_value = [mock_file1, mock_file2]
 
-    with patch('app.metrics.implementations.size.Path', return_value=mock_path):
+    with patch('app.metrics.size.Path', return_value=mock_path):
         with patch('shutil.rmtree'):  # Mock shutil.rmtree directly
             metric = SizeScoreMetric()
             size = metric._fetch_model_size("https://huggingface.co/bert-base-uncased")
@@ -181,7 +181,7 @@ def test_fetch_model_size_success(mock_hf_client):
     print("✓ Model size fetching working correctly")
 
 
-@patch('app.metrics.implementations.size.hf_client')
+@patch('app.metrics.size.hf_client')
 def test_fetch_model_size_download_failure(mock_hf_client):
     """Test model size fetching with download failure."""
     print("Testing model size fetching with download failure...")
@@ -213,7 +213,7 @@ def test_fetch_model_size_invalid_url():
     print("✓ Invalid URL handling working correctly")
 
 
-@patch('app.metrics.implementations.size.hf_client')
+@patch('app.metrics.size.hf_client')
 def test_fetch_model_size_exception(mock_hf_client):
     """Test model size fetching with exception."""
     print("Testing model size fetching with exception...")

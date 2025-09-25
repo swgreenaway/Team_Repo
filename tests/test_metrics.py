@@ -64,7 +64,6 @@ def test_metric_registration():
     print(header("=== Testing Metric Registration ==="))
 
     # Import to trigger registrations (side effects)
-    from app.metrics import implementations  # noqa: F401
     from app.metrics.registry import all_metrics
 
     registered = all_metrics()

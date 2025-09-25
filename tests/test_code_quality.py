@@ -27,7 +27,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from app.metrics.implementations.code_quality import CodeQualityMetric
+from app.metrics.code_quality import CodeQualityMetric
 from app.metrics.base import ResourceBundle
 from app.metrics.registry import all_metrics
 
