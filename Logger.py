@@ -1,26 +1,6 @@
 import os
 import logging
 
-# Read environment variables
-log_file = os.getenv("LOG_FILE", "app.log")
-log_level_env = os.getenv("LOG_LEVEL", "0")
-
-# Map verbosity
-verbosity_map = {
-    "0": logging.CRITICAL + 1,  # Silent
-    "1": logging.INFO,
-    "2": logging.DEBUG,
-}
-log_level = verbosity_map.get(log_level_env, logging.CRITICAL + 1)
-
-# Configure global logging
-logging.basicConfig(
-    filename=log_file,
-    filemode="a",
-    level=log_level,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-)
-
 # NEW: strict LOG_FILE validation for autograder
 def validate_log_file_or_die() -> None:
     import os, sys
@@ -58,6 +38,25 @@ def validate_log_file_or_die() -> None:
     except Exception as e:
         sys.stderr.write(f"ERROR: LOG_FILE not writable: {p}: {e}\n")
         sys.exit(1)
+
+# Read environment variables
+log_file = os.getenv("LOG_FILE")  # no default; don't silently create a file
+log_level_env = os.getenv("LOG_LEVEL", "0")
+
+# FAIL FAST if LOG_FILE is set but invalid (must exist and be writable)
+validate_log_file_or_die()
+
+kwargs = dict(
+    level=log_level,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+)
+
+# only attach a file handler if LOG_FILE was provided
+if log_file:
+    kwargs.update(filename=log_file, filemode="r+")  # don't create new files
+
+logging.basicConfig(**kwargs)
+
 
 def get_logger(name: str):
     """

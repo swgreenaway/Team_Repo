@@ -3,41 +3,6 @@ from Logger import validate_log_file_or_die #new import
 validate_log_file_or_die()
 
 import argparse, sys, os
-
-#Early validation of log files before doing ANYTHING
-# def _early_env_validation():
-#     # Accept common variants just in case
-#     raw = os.getenv("LOG_FILE") or os.getenv("LOG_PATH") or os.getenv("LOGFILE")
-#     if raw is None:
-#         return  # not set -> do nothing
-
-#     p = raw.strip()
-#     if not p:
-#         sys.stderr.write("ERROR: LOG_FILE is empty or whitespace.\n")
-#         sys.exit(1)
-
-#     p = os.path.expanduser(os.path.expandvars(p))
-
-#     # reject directories (including trailing slash paths)
-#     if p.endswith(os.sep) or (os.altsep and p.endswith(os.altsep)) or os.path.isdir(p):
-#         sys.stderr.write(f"ERROR: LOG_FILE points to a directory: {raw}\n")
-#         sys.exit(1)
-
-#     parent = os.path.dirname(p) or "."
-#     if not os.path.isdir(parent):
-#         sys.stderr.write(f"ERROR: LOG_FILE parent dir does not exist: {parent}\n")
-#         sys.exit(1)
-
-#     try:
-#         with open(p, "a", encoding="utf-8"):
-#             pass
-#     except Exception as e:
-#         sys.stderr.write(f"ERROR: invalid LOG_FILE={p}: {e}\n")
-#         sys.exit(1)
-
-# _early_env_validation()
-# --- end early validation ---
-
 from pathlib import Path
 import Orchestrator
 
