@@ -144,33 +144,53 @@ def assemble_ndjson_row(bundle: ResourceBundle, results: Dict[str, MetricResult]
     # Extract model name from URL for the expected format
     model_name = _extract_model_name(bundle.model_url)
 
-    # Start with required fields per specification (matching expected format exactly)
-    ndjson_row = {
-        "name": model_name,
-        "category": category,  # Category determined by caller based on CSV position
-        "net_score": round(net_score, 2),  # 2 decimal precision to match expected
-        "net_score_latency": latency_ms
-    }
+    # Use OrderedDict to maintain specific field ordering as per target format
+    from collections import OrderedDict
+    ndjson_row = OrderedDict()
+    
+    # Required fields first
+    ndjson_row["name"] = model_name
+    ndjson_row["category"] = category
+    ndjson_row["net_score"] = round(net_score, 2)
+    ndjson_row["net_score_latency"] = latency_ms
 
-    # Add individual metric scores and their latencies
-    # Sorted by metric name for consistent output ordering
+    # Add individual metric scores and their latencies in specific order
+    # Order matches the target format: ramp_up_time, bus_factor, performance_claims, license, size_score, dataset_and_code_score, dataset_quality, code_quality
+    metric_order = [
+        "ramp_up_time",
+        "bus_factor", 
+        "performance_claims",
+        "license",
+        "size_score",
+        "dataset_and_code_score",
+        "dataset_quality",
+        "code_quality"
+    ]
+    
+    for metric_name in metric_order:
+        if metric_name in results:
+            result = results[metric_name]
+
+            # Handle size_score specially - it should be an object with device scores
+            if metric_name == "size_score":
+                ndjson_row[metric_name] = _format_size_score(result)
+            else:
+                ndjson_row[metric_name] = round(result.score, 2)  # 2 decimal precision
+
+            ndjson_row[f"{metric_name}_latency"] = result.latency_ms
+    
+    # Add any remaining metrics not in the predefined order (for completeness)
     for metric_name in sorted(results.keys()):
-        result = results[metric_name]
-
-        # Handle size_score specially - it should be an object with device scores
-        if metric_name == "size_score":
-            ndjson_row[metric_name] = _format_size_score(result)
-        else:
-            ndjson_row[metric_name] = round(result.score, 2)  # 2 decimal precision
-
-        ndjson_row[f"{metric_name}_latency"] = result.latency_ms
+        if metric_name not in metric_order:
+            result = results[metric_name]
+            if metric_name == "size_score":
+                ndjson_row[metric_name] = _format_size_score(result)
+            else:
+                ndjson_row[metric_name] = round(result.score, 2)
+            ndjson_row[f"{metric_name}_latency"] = result.latency_ms
     
-    # TODO: In debug mode, could also include:
-    # - ndjson_row["_debug_notes"] = {name: result.notes for name, result in results.items()}
-    # - ndjson_row["_dataset_urls"] = bundle.dataset_urls
-    # - ndjson_row["_code_urls"] = bundle.code_urls
-    
-    return json.dumps(ndjson_row)
+    # Use separators to remove spaces after colons and commas (compact JSON)
+    return json.dumps(ndjson_row, separators=(',', ':'))
 
 def run_bundle(bundle: ResourceBundle, metrics: List[Metric],
                weights_profile: Dict[str, float], category: str = "MODEL") -> str:
