@@ -24,7 +24,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from app.metrics.implementations.dataset_quality import DatasetQualityMetric
+from app.metrics.dataset_quality import DatasetQualityMetric
 from app.metrics.base import ResourceBundle
 from app.metrics.registry import all_metrics
 
@@ -70,7 +70,7 @@ def test_hf_client_unavailable():
     metric = DatasetQualityMetric()
 
     # Mock hf_client as None
-    with patch('app.metrics.implementations.dataset_quality.hf_client', None):
+    with patch('app.metrics.dataset_quality.hf_client', None):
         resource = ResourceBundle(
             model_url="https://huggingface.co/bert-base-uncased",
             dataset_urls=["https://huggingface.co/datasets/squad"],
@@ -286,7 +286,7 @@ def test_licensing_score_calculation():
     print("✓ Licensing score calculation working correctly")
 
 
-@patch('app.metrics.implementations.dataset_quality.hf_client')
+@patch('app.metrics.dataset_quality.hf_client')
 def test_analyze_single_dataset_success(mock_hf_client):
     """Test successful single dataset analysis."""
     print("Testing successful single dataset analysis...")
@@ -341,7 +341,7 @@ This dataset is licensed under CC-BY-4.0.
     print("✓ Successful single dataset analysis working correctly")
 
 
-@patch('app.metrics.implementations.dataset_quality.hf_client')
+@patch('app.metrics.dataset_quality.hf_client')
 def test_analyze_single_dataset_failure(mock_hf_client):
     """Test single dataset analysis failure handling."""
     print("Testing single dataset analysis failure...")
@@ -358,7 +358,7 @@ def test_analyze_single_dataset_failure(mock_hf_client):
     print("✓ Single dataset analysis failure handling working correctly")
 
 
-@patch('app.metrics.implementations.dataset_quality.hf_client')
+@patch('app.metrics.dataset_quality.hf_client')
 def test_compute_score_with_datasets(mock_hf_client):
     """Test score computation with multiple datasets."""
     print("Testing score computation with datasets...")
@@ -405,7 +405,7 @@ def test_compute_score_with_datasets(mock_hf_client):
     print("✓ Score computation with datasets working correctly")
 
 
-@patch('app.metrics.implementations.dataset_quality.hf_client')
+@patch('app.metrics.dataset_quality.hf_client')
 def test_compute_score_with_failed_datasets(mock_hf_client):
     """Test score computation when all datasets fail analysis."""
     print("Testing score computation with failed datasets...")
@@ -468,7 +468,7 @@ def test_computation_notes():
     print("✓ Computation notes working correctly")
 
 
-@patch('app.metrics.implementations.dataset_quality.hf_client')
+@patch('app.metrics.dataset_quality.hf_client')
 def test_metric_computation(mock_hf_client):
     """Test full metric computation with ResourceBundle."""
     print("Testing full metric computation...")
