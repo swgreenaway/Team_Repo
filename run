@@ -1,9 +1,37 @@
 #!/usr/bin/env python3
-import argparse, sys
+import argparse, sys, os
 from pathlib import Path
 import Orchestrator
 
+def validate_environment_variables():
+    """Validate required environment variables at startup."""
+    # Validate GitHub token
+    github_token = os.getenv("GITHUB_TOKEN")
+    if not github_token or len(github_token.strip()) == 0:
+        print("Error: GITHUB_TOKEN environment variable is not set or is empty.", file=sys.stderr)
+        sys.exit(1)
+
+    # Validate log file path
+    log_file = os.getenv("LOG_FILE", "app.log")
+    log_path = Path(log_file)
+
+    # Check if the parent directory exists and is writable
+    try:
+        # Create parent directories if they don't exist
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Test if we can write to the log file location
+        # Try to touch the file to check write permissions
+        log_path.touch(exist_ok=True)
+
+    except (OSError, PermissionError) as e:
+        print(f"Error: Cannot write to log file path '{log_file}': {e}", file=sys.stderr)
+        sys.exit(1)
+
 def main(argv=None) -> int:
+    # Validate environment variables at startup
+    validate_environment_variables()
+
     if argv is None:
         argv = sys.argv[1:]
 
