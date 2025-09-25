@@ -46,8 +46,6 @@ log_level_env = os.getenv("LOG_LEVEL", "0")
 _level_map = {"0": logging.CRITICAL + 1, "1": logging.INFO, "2": logging.DEBUG}
 log_level = _level_map.get(log_level_env, logging.CRITICAL + 1)
 
-# FAIL FAST if LOG_FILE is set but invalid (must exist and be writable)
-# validate_log_file_or_die()
 
 kwargs = dict(
     level=log_level,
@@ -56,10 +54,9 @@ kwargs = dict(
 
 # only attach a file handler if LOG_FILE was provided
 if log_file:
-    kwargs.update(filename=log_file, filemode="a")   # don't create new files
+    kwargs.update(filename=log_file, filemode="r+")   # don't create new files
 
-logging.basicConfig(**kwargs)
-
+# logging.basicConfig(**kwargs)
 
 def get_logger(name: str):
     """
