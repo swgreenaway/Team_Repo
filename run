@@ -31,10 +31,11 @@ def validate_environment_variables():
     if log_file:
         try:
             log_path = Path(log_file)
-            # Create parent directories if they don't exist
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            # Test if we can write to the log file location
-            log_path.touch(exist_ok=True)
+            # Check if parent directory exists and is writable
+            if not log_path.parent.exists():
+                sys.exit(1)
+            if not os.access(log_path.parent, os.W_OK):
+                sys.exit(1)
         except (OSError, PermissionError) as e:
             sys.exit(1)
 
