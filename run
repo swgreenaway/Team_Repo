@@ -5,26 +5,24 @@ import Orchestrator
 
 def validate_environment_variables():
     """Validate required environment variables at startup."""
-    # Validate GitHub token
+    # Validate GitHub token only if it's set
     github_token = os.getenv("GITHUB_TOKEN")
-    if not github_token or len(github_token.strip()) == 0:
-        sys.exit(1)
-
-    # Check if GitHub token is valid by making a simple API call
-    try:
-        import requests
-        response = requests.get(
-            "https://api.github.com/user",
-            headers={"Authorization": f"token {github_token}"},
-            timeout=10
-        )
-        if response.status_code != 200:
+    if github_token and len(github_token.strip()) > 0:
+        # Check if GitHub token is valid by making a simple API call
+        try:
+            import requests
+            response = requests.get(
+                "https://api.github.com/user",
+                headers={"Authorization": f"token {github_token}"},
+                timeout=10
+            )
+            if response.status_code != 200:
+                sys.exit(1)
+        except requests.exceptions.RequestException as e:
             sys.exit(1)
-    except requests.exceptions.RequestException as e:
-        sys.exit(1)
-    except ImportError:
-        # If requests is not available, skip validation but warn
-        pass
+        except ImportError:
+            # If requests is not available, skip validation but warn
+            pass
 
     # Validate log file path only if LOG_FILE is explicitly set
     log_file = os.getenv("LOG_FILE")
