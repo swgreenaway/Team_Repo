@@ -36,6 +36,7 @@ Notes
 import sys
 from pathlib import Path
 import json
+from unittest.mock import patch
 
 # Add src to path for imports
 src_path = Path(__file__).parent.parent / "src"
@@ -221,6 +222,33 @@ def test_engine_functionality():
 
     print(success(f"NDJSON structure and scores validated (net_score: {net:.3f})"))
 
+
+def test_dataset_quality_partial_credit_missing_metadata():
+    """Dataset quality should still award a score when metadata is sparse."""
+    print(header("\n=== Testing Dataset Quality Partial Credit ==="))
+
+    from app.metrics.dataset_quality import DatasetQualityMetric
+    from app.metrics.base import ResourceBundle
+
+    metric = DatasetQualityMetric()
+
+    with patch('app.metrics.dataset_quality.hf_client') as mock_hf:
+        mock_hf.get_dataset_info.return_value = {'dataset_info': {}}
+        mock_hf.get_dataset_card_data.return_value = {}
+        mock_hf.get_dataset_readme.return_value = "Minimal documentation."
+
+        resource = ResourceBundle(
+            model_url="https://huggingface.co/model-with-sparse-metadata",
+            dataset_urls=["https://huggingface.co/datasets/test-dataset"],
+            code_urls=[]
+        )
+
+        result = metric.compute(resource)
+
+        print(info(f"Score with sparse metadata: {result.score}"))
+        assert result.score > 0.1, "Expected non-zero score even with sparse metadata"
+
+
 def test_metric_ecosystem_awareness():
     print(header("\n=== Testing Ecosystem Awareness ==="))
 
@@ -267,6 +295,7 @@ def main():
         test_metric_registration,
         test_individual_metrics,
         test_engine_functionality,
+        test_dataset_quality_partial_credit_missing_metadata,
         test_metric_ecosystem_awareness,
     ]
     passed = 0

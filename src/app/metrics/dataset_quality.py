@@ -17,21 +17,18 @@ class DatasetQualityMetric(BaseMetric):
     """
     Evaluates dataset reliability, popularity, and quality indicators.
 
-    This metric analyzes datasets used for training and evaluation across multiple dimensions:
-    - Dataset size, diversity, and representativeness
-    - Data quality indicators (completeness, accuracy, consistency)
-    - Dataset popularity and community adoption (downloads, likes)
-    - Documentation completeness and metadata quality
-    - Data collection methodology and ethics
-    - Bias analysis and fairness considerations
-    - License compliance and legal considerations
+    The simplified scoring rubric focuses on three pillars that are broadly
+    available even when dataset cards are sparse:
+    - Dataset presence and availability (can the dataset be fetched, is it maintained)
+    - Documentation quality (README content, summaries, timestamps)
+    - Popularity and community adoption (downloads, likes)
 
     Scoring Rubric:
-    - 1.0: Excellent datasets with comprehensive documentation, high popularity, and quality indicators
+    - 1.0: Excellent datasets with comprehensive documentation and clear evidence of adoption
     - 0.8: Good datasets with solid documentation and moderate popularity
-    - 0.6: Acceptable datasets but missing some quality indicators
-    - 0.4: Poor datasets with limited documentation or quality concerns
-    - 0.2: Very poor datasets with significant quality issues
+    - 0.6: Acceptable datasets with basic documentation or modest usage signals
+    - 0.4: Poor datasets with minimal documentation or unclear availability
+    - 0.2: Very poor datasets with almost no supporting signals
     - 0.0: No datasets or completely inaccessible datasets
     """
 
@@ -44,9 +41,7 @@ class DatasetQualityMetric(BaseMetric):
         Analyzes each dataset for:
         1. Popularity metrics (downloads, likes, community usage)
         2. Documentation quality and completeness
-        3. Size categories and data diversity
-        4. Licensing and ethical considerations
-        5. Task alignment and utility
+        3. Availability signals indicating the dataset can be used and is maintained
 
         Args:
             resource: Bundle with dataset URLs to analyze
@@ -192,20 +187,16 @@ class DatasetQualityMetric(BaseMetric):
             downloads = card_data.get('downloads', 0) or 0
             likes = card_data.get('likes', 0) or 0
 
-            # Calculate quality score components
+            # Calculate quality score components with a simplified rubric
             popularity_score = self._calculate_popularity_score(downloads, likes)
             documentation_score = self._calculate_documentation_score(card_data, readme_content)
-            metadata_score = self._calculate_metadata_score(card_data)
-            diversity_score = self._calculate_diversity_score(card_data)
-            licensing_score = self._calculate_licensing_score(card_data)
+            presence_score = self._calculate_presence_score(dataset_info, card_data, readme_content)
 
-            # Weighted overall score
+            # Weighted overall score focused on presence, documentation, and popularity
             overall_score = (
-                popularity_score * 0.25 +      # 25% popularity
-                documentation_score * 0.30 +   # 30% documentation
-                metadata_score * 0.20 +        # 20% metadata completeness
-                diversity_score * 0.15 +       # 15% data diversity
-                licensing_score * 0.10         # 10% licensing
+                presence_score * 0.3 +
+                documentation_score * 0.35 +
+                popularity_score * 0.35
             )
 
             details = {
@@ -215,9 +206,7 @@ class DatasetQualityMetric(BaseMetric):
                 'likes': likes,
                 'popularity_score': popularity_score,
                 'documentation_score': documentation_score,
-                'metadata_score': metadata_score,
-                'diversity_score': diversity_score,
-                'licensing_score': licensing_score
+                'presence_score': presence_score
             }
 
             return overall_score, details
@@ -266,7 +255,7 @@ class DatasetQualityMetric(BaseMetric):
         """
         score = 0.0
 
-        # Check for README content
+        # Check for README content and award partial credit even if brief
         if readme_content:
             score += 0.4
 
@@ -278,124 +267,46 @@ class DatasetQualityMetric(BaseMetric):
             readme_lower = readme_content.lower()
             key_sections = ['dataset', 'description', 'usage', 'citation', 'license']
             found_sections = sum(1 for section in key_sections if section in readme_lower)
-            score += (found_sections / len(key_sections)) * 0.2
-
-        # Check for structured metadata
-        if card_data.get('task_categories'):
-            score += 0.1
-        if card_data.get('language'):
-            score += 0.1
-        if card_data.get('size_categories'):
-            score += 0.1
-        if card_data.get('source_datasets'):
-            score += 0.1
-
-        return min(1.0, score)
-
-    def _calculate_metadata_score(self, card_data: Dict) -> float:
-        """
-        Calculate metadata completeness score.
-
-        Args:
-            card_data: Dataset card metadata
-
-        Returns:
-            Score from 0-1 based on metadata completeness
-        """
-        score = 0.0
-        max_score = 8.0
-
-        # Check for various metadata fields
-        if card_data.get('task_categories'):
-            score += 1.0
-        if card_data.get('task_ids'):
-            score += 1.0
-        if card_data.get('language'):
-            score += 1.0
-        if card_data.get('multilinguality'):
-            score += 1.0
-        if card_data.get('size_categories'):
-            score += 1.0
-        if card_data.get('source_datasets'):
-            score += 1.0
-        if card_data.get('tags'):
-            score += 1.0
-        if card_data.get('created_at') or card_data.get('last_modified'):
-            score += 1.0
-
-        return score / max_score
-
-    def _calculate_diversity_score(self, card_data: Dict) -> float:
-        """
-        Calculate data diversity score.
-
-        Args:
-            card_data: Dataset card metadata
-
-        Returns:
-            Score from 0-1 based on data diversity indicators
-        """
-        score = 0.0
-
-        # Language diversity
-        languages = card_data.get('language', [])
-        if isinstance(languages, list) and len(languages) > 1:
-            score += 0.3  # Multilingual datasets
-        elif languages:
-            score += 0.1  # Single language specified
-
-        # Size categories (larger datasets generally better)
-        size_categories = card_data.get('size_categories', [])
-        if isinstance(size_categories, list):
-            # Check for large dataset indicators
-            large_indicators = ['100K<n<1M', '1M<n<10M', '10M<n<100M', '100M<n<1B', 'n>1B']
-            if any(indicator in size_categories for indicator in large_indicators):
-                score += 0.4
-            elif size_categories:
-                score += 0.2
-
-        # Task diversity
-        task_categories = card_data.get('task_categories', [])
-        if isinstance(task_categories, list) and len(task_categories) > 1:
-            score += 0.2  # Multi-task datasets
-        elif task_categories:
-            score += 0.1
-
-        # Source diversity
-        source_datasets = card_data.get('source_datasets', [])
-        if isinstance(source_datasets, list) and len(source_datasets) > 1:
-            score += 0.1  # Derived from multiple sources
-
-        return min(1.0, score)
-
-    def _calculate_licensing_score(self, card_data: Dict) -> float:
-        """
-        Calculate licensing and ethics score.
-
-        Args:
-            card_data: Dataset card metadata
-
-        Returns:
-            Score from 0-1 based on licensing clarity and ethics
-        """
-        score = 0.0
-
-        license_info = card_data.get('license')
-        if license_info:
-            # Open licenses get higher scores
-            open_licenses = ['mit', 'apache-2.0', 'bsd', 'cc-by', 'cc0', 'unlicense']
-            if any(open_lic in str(license_info).lower() for open_lic in open_licenses):
-                score += 0.8
-            else:
-                score += 0.4  # Has license but may be restrictive
+            score += (found_sections / len(key_sections)) * 0.3
         else:
-            score += 0.1  # No license information (concerning)
+            # Minimal credit for having any descriptive metadata
+            if card_data.get('card_data') or card_data.get('cardData'):
+                score += 0.1
 
-        # Bonus for ethics considerations
-        tags = card_data.get('tags', [])
-        if isinstance(tags, list):
-            ethics_tags = ['ethics', 'bias', 'fairness', 'privacy', 'responsible-ai']
-            if any(tag in str(tags).lower() for tag in ethics_tags):
-                score += 0.2
+        # Structured metadata and timestamps offer supporting evidence
+        if card_data.get('last_modified') or card_data.get('created_at'):
+            score += 0.1
+        if card_data.get('summary') or card_data.get('description'):
+            score += 0.1
+        if card_data.get('tags'):
+            score += 0.05
+        if card_data.get('license'):
+            score += 0.05
+
+        return min(1.0, score)
+
+    def _calculate_presence_score(
+        self,
+        dataset_info: Optional[Dict],
+        card_data: Dict,
+        readme_content: Optional[str]
+    ) -> float:
+        """Assess whether the dataset appears usable and maintained."""
+
+        score = 0.0
+
+        # Credit for being able to fetch dataset info, even if sparse
+        if dataset_info is not None:
+            score += 0.6
+
+        # Credit for having card data or README content
+        if card_data:
+            score += 0.2
+        if readme_content:
+            score += 0.1
+
+        # Signals of recent activity or maintenance
+        if card_data.get('last_modified') or card_data.get('updatedAt'):
+            score += 0.1
 
         return min(1.0, score)

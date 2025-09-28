@@ -5,7 +5,7 @@ Test for the dataset quality metric implementation.
 This test verifies:
 - Dataset quality metric registration and basic functionality
 - Dataset information fetching and analysis
-- Quality scoring algorithms for popularity, documentation, metadata, diversity, licensing
+- Simplified quality scoring rubric focusing on dataset presence, documentation, and popularity
 - Error handling for invalid/inaccessible datasets
 - Integration with the metrics system
 - Mock testing for HuggingFace API operations
@@ -16,7 +16,7 @@ Or with pytest: pytest tests/test_dataset_quality.py -v
 
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
 # Add src to path for imports (consistent with other tests)
 ROOT = Path(__file__).resolve().parent.parent  # Go up from tests/ to repo root
@@ -142,10 +142,15 @@ def test_documentation_score_calculation():
     score_no_docs = metric._calculate_documentation_score({}, None)
     assert score_no_docs == 0.0, f"Expected 0.0 for no docs, got {score_no_docs}"
 
+    # Test with minimal metadata signals but no README
+    timestamp_only = {'last_modified': '2024-01-01T00:00:00'}
+    score_timestamp = metric._calculate_documentation_score(timestamp_only, None)
+    assert 0.05 < score_timestamp <= 0.2, f"Expected partial credit for timestamps, got {score_timestamp}"
+
     # Test with basic README
     basic_readme = "This is a dataset for machine learning."
     score_basic = metric._calculate_documentation_score({}, basic_readme)
-    assert 0.3 < score_basic < 0.6, f"Expected medium score for basic README, got {score_basic}"
+    assert 0.35 <= score_basic <= 0.55, f"Expected moderate score for basic README, got {score_basic}"
 
     # Test with comprehensive README
     comprehensive_readme = """
@@ -166,124 +171,17 @@ Please cite this work if you use it.
 This dataset is released under MIT license.
 """
     score_comprehensive = metric._calculate_documentation_score({}, comprehensive_readme)
-    assert score_comprehensive > 0.6, f"Expected high score for comprehensive README, got {score_comprehensive}"
+    assert score_comprehensive > score_basic, f"Expected higher score for comprehensive README, got {score_comprehensive}"
 
-    # Test with metadata
+    # Test with supporting metadata alongside README
     metadata = {
-        'task_categories': ['text-classification'],
-        'language': ['en'],
-        'size_categories': ['100K<n<1M'],
-        'source_datasets': ['original']
+        'tags': ['nlp'],
+        'summary': 'Short summary'
     }
     score_with_metadata = metric._calculate_documentation_score(metadata, basic_readme)
-    assert score_with_metadata > score_basic, "Score should be higher with metadata"
+    assert score_with_metadata > score_basic, "Score should be higher with supporting metadata"
 
     print("✓ Documentation score calculation working correctly")
-
-
-def test_metadata_score_calculation():
-    """Test metadata completeness score calculation."""
-    print("Testing metadata score calculation...")
-
-    metric = DatasetQualityMetric()
-
-    # Test with no metadata
-    score_no_metadata = metric._calculate_metadata_score({})
-    assert score_no_metadata == 0.0, f"Expected 0.0 for no metadata, got {score_no_metadata}"
-
-    # Test with partial metadata
-    partial_metadata = {
-        'task_categories': ['text-classification'],
-        'language': ['en'],
-        'tags': ['nlp', 'classification']
-    }
-    score_partial = metric._calculate_metadata_score(partial_metadata)
-    assert 0.2 < score_partial < 0.6, f"Expected medium score for partial metadata, got {score_partial}"
-
-    # Test with comprehensive metadata
-    full_metadata = {
-        'task_categories': ['text-classification'],
-        'task_ids': ['topic-classification'],
-        'language': ['en'],
-        'multilinguality': 'monolingual',
-        'size_categories': ['100K<n<1M'],
-        'source_datasets': ['original'],
-        'tags': ['nlp', 'classification'],
-        'created_at': '2023-01-01'
-    }
-    score_full = metric._calculate_metadata_score(full_metadata)
-    assert score_full == 1.0, f"Expected 1.0 for full metadata, got {score_full}"
-
-    print("✓ Metadata score calculation working correctly")
-
-
-def test_diversity_score_calculation():
-    """Test data diversity score calculation."""
-    print("Testing diversity score calculation...")
-
-    metric = DatasetQualityMetric()
-
-    # Test with no diversity info
-    score_no_diversity = metric._calculate_diversity_score({})
-    assert score_no_diversity == 0.0, f"Expected 0.0 for no diversity info, got {score_no_diversity}"
-
-    # Test with language diversity
-    multilingual_data = {'language': ['en', 'es', 'fr']}
-    score_multilingual = metric._calculate_diversity_score(multilingual_data)
-    assert score_multilingual >= 0.3, f"Expected high score for multilingual, got {score_multilingual}"
-
-    # Test with size diversity
-    large_size_data = {'size_categories': ['1M<n<10M']}
-    score_large = metric._calculate_diversity_score(large_size_data)
-    assert score_large >= 0.4, f"Expected high score for large dataset, got {score_large}"
-
-    # Test with task diversity
-    multitask_data = {'task_categories': ['text-classification', 'question-answering']}
-    score_multitask = metric._calculate_diversity_score(multitask_data)
-    assert score_multitask >= 0.2, f"Expected decent score for multitask, got {score_multitask}"
-
-    # Test comprehensive diversity
-    diverse_data = {
-        'language': ['en', 'es'],
-        'size_categories': ['10M<n<100M'],
-        'task_categories': ['text-classification', 'ner'],
-        'source_datasets': ['original', 'derived']
-    }
-    score_diverse = metric._calculate_diversity_score(diverse_data)
-    assert score_diverse >= 0.8, f"Expected very high score for diverse dataset, got {score_diverse}"
-
-    print("✓ Diversity score calculation working correctly")
-
-
-def test_licensing_score_calculation():
-    """Test licensing and ethics score calculation."""
-    print("Testing licensing score calculation...")
-
-    metric = DatasetQualityMetric()
-
-    # Test with no license
-    score_no_license = metric._calculate_licensing_score({})
-    assert score_no_license == 0.1, f"Expected 0.1 for no license, got {score_no_license}"
-
-    # Test with open license
-    open_license_data = {'license': 'mit'}
-    score_open = metric._calculate_licensing_score(open_license_data)
-    assert score_open >= 0.8, f"Expected high score for open license, got {score_open}"
-
-    # Test with restrictive license
-    restrictive_license_data = {'license': 'custom-restrictive'}
-    score_restrictive = metric._calculate_licensing_score(restrictive_license_data)
-    assert 0.3 < score_restrictive < 0.6, f"Expected medium score for restrictive license, got {score_restrictive}"
-
-    # Test with ethics tags
-    ethics_data = {
-        'license': 'apache-2.0',
-        'tags': ['bias-analysis', 'fairness', 'responsible-ai']
-    }
-    score_ethics = metric._calculate_licensing_score(ethics_data)
-    assert score_ethics == 1.0, f"Expected 1.0 for open license + ethics, got {score_ethics}"
-
-    print("✓ Licensing score calculation working correctly")
 
 
 @patch('app.metrics.dataset_quality.hf_client')
@@ -300,11 +198,8 @@ def test_analyze_single_dataset_success(mock_hf_client):
     mock_card_data = {
         'downloads': 50000,
         'likes': 500,
-        'task_categories': ['question-answering'],
-        'language': ['en'],
         'license': 'cc-by-4.0',
-        'size_categories': ['100K<n<1M'],
-        'tags': ['nlp', 'qa']
+        'last_modified': '2024-01-01T00:00:00'
     }
 
     mock_readme = """
@@ -337,6 +232,7 @@ This dataset is licensed under CC-BY-4.0.
     assert details['id'] == 'squad', "Should include dataset ID in details"
     assert details['downloads'] == 50000, "Should include download count"
     assert details['likes'] == 500, "Should include like count"
+    assert 'presence_score' in details, "Details should report presence score"
 
     print("✓ Successful single dataset analysis working correctly")
 
@@ -369,7 +265,7 @@ def test_compute_score_with_datasets(mock_hf_client):
         'downloads': 10000,
         'likes': 100,
         'license': 'mit',
-        'task_categories': ['text-classification']
+        'last_modified': '2023-12-01T00:00:00'
     }
     mock_hf_client.get_dataset_readme.return_value = "Basic dataset documentation."
 
@@ -482,7 +378,7 @@ def test_metric_computation(mock_hf_client):
         'downloads': 10000,
         'likes': 100,
         'license': 'mit',
-        'task_categories': ['question-answering']
+        'last_modified': '2023-12-01T00:00:00'
     }
     mock_hf_client.get_dataset_readme.return_value = "Dataset documentation."
 
@@ -526,9 +422,6 @@ def run_all_tests():
         test_extract_dataset_id()
         test_popularity_score_calculation()
         test_documentation_score_calculation()
-        test_metadata_score_calculation()
-        test_diversity_score_calculation()
-        test_licensing_score_calculation()
         test_analyze_single_dataset_success()
         test_analyze_single_dataset_failure()
         test_compute_score_with_datasets()
