@@ -193,7 +193,7 @@ def process_url(url: str) -> int:
         return 1
 
 
-def run_metrics(model_url: str, dataset_urls: List[str] = None, code_urls: List[str] = None, weights: Dict[str, float] = None, use_cache: bool = True, category: str = "MODEL") -> str:
+def run_metrics(model_url: str, dataset_urls: List[str] = None, code_urls: List[str] = None, weights: Dict[str, float] = None, use_cache: bool = False, category: str = "MODEL") -> str:
     """
     Run the metrics system on a given model with optional dataset and code URLs.
 
